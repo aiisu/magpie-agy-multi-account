@@ -1,0 +1,52 @@
+{
+  "name": "magpie-agy-multi-account",
+  "version": "0.1.55-multi.1",
+  "description": "Magpie/OpenCode model provider that connects your local agy CLI through the Agent Client Protocol (agy acp), so Antigravity subscription models run through the real CLI",
+  "type": "module",
+  "main": "./multi-account/plugin.mjs",
+  "exports": {
+    ".": "./multi-account/plugin.mjs"
+  },
+  "files": [
+    "multi-account",
+    "index.mjs",
+    "opencode.mjs",
+    "opencode2.mjs",
+    "platform.mjs",
+    "login.mjs",
+    "mcp-server.mjs",
+    "step-usage.mjs",
+    "tool-schema.mjs",
+    "tool-budget.mjs",
+    "usage.mjs",
+    "signin.mjs",
+    "README.md",
+    "README.en.md",
+    "UPSTREAM-README.md",
+    "LICENSE",
+    "NOTICE.md",
+    "re2-pattern.mjs",
+    "array-items.mjs",
+    "cloak.mjs"
+  ],
+  "keywords": [
+    "magpie",
+    "magpie-plugin",
+    "opencode",
+    "opencode-plugin",
+    "antigravity",
+    "agy",
+    "acp"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aiisu/magpie-agy-multi-account.git"
+  },
+  "scripts": {
+    "test": "bun test tests"
+  },
+  "magpie": {
+    "maxConcurrency": 2
+  }
+}
