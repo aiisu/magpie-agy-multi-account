@@ -3,7 +3,7 @@ umask 077
 case "$1" in
   --version|--help) exec "$AGY_REAL_PATH" "$@" ;;
 esac
-if [ "$1" = acp ] && [ "$2" = --help ]; then
+if [ "$1" = acp ] && { [ "$2" = --help ] || [ "$2" = --login ]; }; then
   exec "$AGY_REAL_PATH" "$@"
 fi
 attempt=0

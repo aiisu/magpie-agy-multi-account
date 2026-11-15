@@ -122,3 +122,15 @@ test('busy capacity and a crashed worker do not corrupt another account', async 
   expect((await manager.rpc(first, 'usage')).user).toBe('first@example.invalid')
   expect((await manager.rpc(second, 'usage')).user).toBe('second@example.invalid')
 })
+
+test('pending sign-ins have separate bounded capacity from serving accounts', async () => {
+  const pendingFirst = await seed('pending-first@example.invalid')
+  const pendingSecond = await seed('pending-second@example.invalid')
+  await manager.rpc(pendingFirst, 'environment', {}, undefined, true)
+  await manager.rpc(pendingSecond, 'environment', {}, undefined, true)
+  const pendingThird = await seed('pending-third@example.invalid')
+  await expect(manager.rpc(pendingThird, 'environment', {}, undefined, true)).rejects.toMatchObject({ status: 503 })
+  expect((await manager.rpc(first, 'usage')).user).toBe('first@example.invalid')
+  expect((await manager.rpc(second, 'usage')).user).toBe('second@example.invalid')
+  expect(manager.workers.size).toBe(4)
+})

@@ -49,7 +49,8 @@ export class AccountManager {
         worker.active++
         return worker
       }
-      if (this.workers.size >= 2) {
+      const count = () => [...this.workers.values()].filter(candidate => candidate.provisional === provisional).length
+      if (count() >= 2 && !provisional) {
         for (const candidate of [...this.workers.values()].sort((first, second) => first.lastUsed - second.lastUsed)) {
           if (candidate.active || candidate.provisional) continue
           const status = await this.control(candidate, 'status').catch(() => ({ busy: true }))
@@ -58,7 +59,9 @@ export class AccountManager {
           break
         }
       }
-      if (this.workers.size >= 2) throw Object.assign(new Error('CLI account capacity is busy; retry after an active turn finishes.'), { status: 503 })
+      if (count() >= 2) throw Object.assign(new Error(provisional
+        ? 'Two CLI sign-ins are pending; finish one or wait for its 15-minute timeout.'
+        : 'CLI account capacity is busy; retry after an active turn finishes.'), { status: 503 })
       const directory = await prepareAccount(this.root, id)
       const slots = path.join(this.root, 'slots')
       await fs.mkdir(slots, { recursive: true, mode: 0o700 })

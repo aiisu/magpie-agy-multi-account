@@ -24,7 +24,15 @@ test.skipIf(process.platform !== 'linux')('real workers maintain simultaneous lo
   await fs.writeFile(realAgy, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(fixture)} "$@"\n`, { mode: 0o700 })
   await fs.writeFile(authFile, '{}')
   const manager = new AccountManager({ root, authFile, realAgy })
+  const holders = []
   try {
+    const slots = path.join(root, 'slots')
+    await fs.mkdir(slots, { mode: 0o700 })
+    for (const slot of [0, 1]) {
+      holders.push(spawn('/usr/bin/flock', [path.join(slots, `slot-${slot}.lock`), '/bin/sleep', '30'],
+        { detached: true, stdio: 'ignore' }))
+    }
+    await Bun.sleep(100)
     const first = await createAccount(root)
     const second = await createAccount(root)
     const logins = await Promise.all([first, second].map(id => manager.rpc(id, 'authorize', {}, undefined, true)))
@@ -36,6 +44,11 @@ test.skipIf(process.platform !== 'linux')('real workers maintain simultaneous lo
     expect(results.map(result => result.type)).toEqual(['success', 'success'])
     expect(await identity(root, first)).toBe('first@example.invalid')
     expect(await identity(root, second)).toBe('second@example.invalid')
+    for (const child of holders) {
+      const stopped = new Promise(resolve => child.once('exit', resolve))
+      process.kill(-child.pid, 'SIGKILL')
+      await stopped
+    }
     await fs.writeFile(authFile, JSON.stringify({ 'agy-cli': { type: 'api', key: PREFIX + first },
       'agy-cli#2': { type: 'api', key: PREFIX + second } }))
     const usages = await Promise.all([first, second].map(id => manager.rpc(id, 'usage')))
@@ -49,6 +62,9 @@ test.skipIf(process.platform !== 'linux')('real workers maintain simultaneous lo
     expect((await manager.rpc(first, 'usage')).windows[0].used).toBe(25)
     expect(Object.keys(await manager.rpc(second, 'models'))).toContain('gemini-test-high')
   } finally {
+    for (const child of holders) {
+      try { process.kill(-child.pid, 'SIGKILL') } catch {}
+    }
     await manager.close()
     await fs.rm(root, { recursive: true, force: true })
   }

@@ -31,7 +31,7 @@ export async function MultiAccountPlugin() {
                   if (result.type !== 'success') { await manager.discard(id); return result }
                   const email = await identity(root, id)
                   const worker = manager.workers.get(id)
-                  if (worker) { worker.provisional = false; worker.created = Date.now() }
+                  if (worker) await manager.stop(worker)
                   options.signal?.removeEventListener('abort', cancel)
                   return { type: 'success', key: PREFIX + id, metadata: { email } }
                 } catch (error) {

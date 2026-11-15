@@ -1,6 +1,6 @@
 {
   "name": "magpie-agy-multi-account",
-  "version": "0.1.55-multi.1",
+  "version": "0.1.55-multi.2",
   "description": "Magpie/OpenCode model provider that connects your local agy CLI through the Agent Client Protocol (agy acp), so Antigravity subscription models run through the real CLI",
   "type": "module",
   "main": "./multi-account/plugin.mjs",

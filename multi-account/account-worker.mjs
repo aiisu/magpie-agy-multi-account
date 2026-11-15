@@ -1,4 +1,5 @@
 import { AntigravityBridgePlugin, accountBridgeStatus, releaseAccountIdle } from '../index.mjs'
+import { startLogin } from '../login.mjs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -53,16 +54,17 @@ const server = Bun.serve({
         finally { usagePending = null }
       }
       if (input.method === 'authorize') {
-        const result = await plugin.auth.methods[0].authorize()
-        if (result.type === 'failed') return Response.json(result)
+        const result = await startLogin(process.env.AGY_PATH)
+        if (result.error) return Response.json({ type: 'failed', error: result.error })
         login = result
-        return Response.json({ url: result.url, instructions: result.instructions, method: result.method })
+        return Response.json({ url: result.url, method: 'code' })
       }
       if (input.method === 'finish') {
         if (!login) throw new Error('This login session has ended; start again.')
         const current = login
         login = null
-        return Response.json(await current.callback(input.code, { signal: request.signal }))
+        const result = await current.finish(input.code, { signal: request.signal })
+        return Response.json(result.error ? { type: 'failed', error: result.error } : { type: 'success' })
       }
       return new Response(null, { status: 404 })
     } catch (error) {
