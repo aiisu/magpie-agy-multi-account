@@ -70,6 +70,51 @@ test.skipIf(process.platform !== 'linux')('real workers maintain simultaneous lo
   }
 }, 60000)
 
+test.skipIf(process.platform !== 'linux')('complete foreign tool results recover a detached worker on the first request', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-replay-test-'))
+  const authFile = path.join(root, 'auth.json')
+  const realAgy = path.join(root, 'agy')
+  const fixture = fileURLToPath(new URL('./fixtures/agy.mjs', import.meta.url))
+  const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
+  await fs.writeFile(realAgy, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(fixture)} "$@"\n`, { mode: 0o700 })
+  const id = await createAccount(root)
+  const directory = path.join(root, id, 'home/.gemini/antigravity-cli')
+  await fs.mkdir(directory, { mode: 0o700 })
+  await fs.writeFile(path.join(directory, 'antigravity-oauth-token'), JSON.stringify({
+    id_token_email: 'first@example.invalid', token: { refresh_token: 'synthetic-test-value' },
+  }), { mode: 0o600 })
+  await fs.writeFile(authFile, JSON.stringify({ 'agy-cli': { type: 'api', key: PREFIX + id } }))
+  const manager = new AccountManager({ root, authFile, realAgy, env: { ...process.env,
+    AGY_TEST_TOOL: '1', AGY_TEST_REPLY: 'Recovered REPLAY_RESULT_OK',
+  } })
+  const request = messages => manager.request(id, 'agy://local/v1/messages', {
+    body: JSON.stringify({ model: 'gemini-test-high', max_tokens: 64, stream: false, messages,
+      tools: [{ name: 'synthetic_tool', input_schema: { type: 'object', properties: {} } }] }),
+  })
+  try {
+    const opening = [{ role: 'user', content: 'Start a synthetic tool task' }]
+    const first = await request(opening)
+    expect(first.status).toBe(200)
+    const initial = await first.json()
+    expect(initial.content.some(block => block.type === 'tool_use')).toBe(true)
+    const incomplete = await request([...opening,
+      { role: 'assistant', content: [...initial.content,
+        { type: 'tool_use', id: 'unanswered-call', name: 'synthetic_tool', input: {} }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'unanswered-call', content: 'REPLAY_RESULT_OK' }] },
+    ])
+    expect(incomplete.status).toBe(409)
+    const response = await request([...opening,
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'foreign-call', name: 'synthetic_tool', input: { query: 'Another branch' } }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'foreign-call', content: 'REPLAY_RESULT_OK' }] },
+    ])
+    expect(response.status).toBe(200)
+    expect((await response.json()).content).toContainEqual({ type: 'text', text: 'Recovered REPLAY_RESULT_OK' })
+  } finally {
+    await manager.close()
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 60000)
+
 test.skipIf(process.platform !== 'linux')('global CLI slots remain locked until the CLI exits', async () => {
   const slots = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-slots-test-'))
   const launcher = fileURLToPath(new URL('../multi-account/cli-launcher.sh', import.meta.url))

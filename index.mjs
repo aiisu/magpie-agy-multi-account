@@ -3232,6 +3232,11 @@ function replayHistoryProblem(body, resultBlocks) {
   return answered.size === ids.size ? null : "missing_tool_result"
 }
 
+export function canReplayDetachedResults(proc, turn, body, resultBlocks, acquireOpts) {
+  return !replayHistoryProblem(body, resultBlocks) &&
+    lineageVerdict(proc, turn, { ...acquireOpts, history: body.messages }) === "fork"
+}
+
 async function reclaimStaleTurn(proc, turn, note = "agy bridge: stale tool turn closed") {
   noProgressRepeats.delete(proc.convKey)
   turn.closeNote = note
@@ -3274,13 +3279,12 @@ async function recoverStaleTurn(ctx) {
     }
     if (held.cancelRequested) return { kind: "fallthrough" }
     const verdict = staleTurnVerdict(current, held)
-    // Lineage supersession belongs to acquisition of a new prompt. Unmatched
-    // results alone reclaim an unexpired owner only at the repeat limit.
-    if (!verdict.stale && (!forced || verdict.reason === "attached" || verdict.reason === "steering")) {
+    const lineageFork = canReplayDetachedResults(current, held, ctx.body, ctx.resultBlocks, ctx.acquireOpts)
+    if (!verdict.stale && !lineageFork && (!forced || verdict.reason === "attached" || verdict.reason === "steering")) {
       logBridgeEvent(current, held, "reject_active", verdict.reason, ctx.acquireOpts, extra)
       return { kind: "active" }
     }
-    const reason = verdict.stale ? verdict.reason : "no_progress_repeat"
+    const reason = verdict.stale ? verdict.reason : lineageFork ? "lineage_fork" : "no_progress_repeat"
     logBridgeEvent(current, held, "reclaim", reason, ctx.acquireOpts, extra)
     await reclaimStaleTurn(current, held)
     const problem = replayHistoryProblem(ctx.body, ctx.resultBlocks)
@@ -6080,7 +6084,7 @@ export const AntigravityBridgePlugin = async () => {
                 if (held?.turn && !held.turn.cancelRequested) {
                   const verdict = staleTurnVerdict(held, held.turn)
                   let attempts
-                  if (!verdict.stale) {
+                  if (!verdict.stale && !canReplayDetachedResults(held, held.turn, body, resultBlocks, acquireOpts)) {
                     // An attached stream is live progress; only a quiet turn counts.
                     if (verdict.reason === "attached" || verdict.reason === "steering") noProgressRepeats.delete(convKey)
                     else attempts = noteNoProgressRepeat(convKey, held.turn)

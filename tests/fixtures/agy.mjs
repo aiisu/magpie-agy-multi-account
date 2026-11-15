@@ -1,6 +1,23 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
+import net from 'node:net'
+
+function control(payload) {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host: '127.0.0.1', port: Number(process.env.AGY_BRIDGE_CONTROL_PORT) })
+    socket.setEncoding('utf8')
+    socket.on('error', reject)
+    socket.on('connect', () => socket.write(JSON.stringify({ token: process.env.AGY_BRIDGE_TOKEN, ...payload }) + '\n'))
+    let buffer = ''
+    socket.on('data', text => {
+      buffer += text
+      if (!buffer.includes('\n')) return
+      socket.end()
+      resolve(JSON.parse(buffer.split('\n')[0]))
+    })
+  })
+}
 
 const args = process.argv.slice(2)
 const credential = path.join(process.env.HOME, '.gemini/antigravity-cli/antigravity-oauth-token')
@@ -29,6 +46,14 @@ if (args.includes('--version')) {
   for await (const line of createInterface({ input: process.stdin })) {
     const message = JSON.parse(line)
     if (message.id === undefined) continue
+    if (process.env.AGY_TEST_TOOL && message.method === 'session/new') await control({ kind: 'list' })
+    if (process.env.AGY_TEST_TOOL && message.method === 'session/prompt' &&
+      !JSON.stringify(message.params).includes('REPLAY_RESULT_OK')) {
+      void control({ kind: 'call', name: 'synthetic_tool', arguments: {} }).then(() => {
+        console.log(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { stopReason: 'end_turn' } }))
+      })
+      continue
+    }
     if (message.method === 'session/prompt' && process.env.AGY_TEST_REPLY) {
       for (const text of process.env.AGY_TEST_REPLY) {
         console.log(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: {
