@@ -97,3 +97,46 @@ test.skipIf(process.platform !== 'linux')('global CLI slots remain locked until 
     await fs.rm(slots, { recursive: true, force: true })
   }
 }, 20000)
+
+test.skipIf(process.platform !== 'linux')('quota warnings become a stream error or HTTP 429 instead of a successful answer', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-quota-error-test-'))
+  const authFile = path.join(root, 'auth.json')
+  const realAgy = path.join(root, 'agy')
+  const fixture = fileURLToPath(new URL('./fixtures/agy.mjs', import.meta.url))
+  const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
+  await fs.writeFile(realAgy, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(fixture)} "$@"\n`, { mode: 0o700 })
+  const id = await createAccount(root)
+  const directory = path.join(root, id, 'home/.gemini/antigravity-cli')
+  await fs.mkdir(directory, { mode: 0o700 })
+  await fs.writeFile(path.join(directory, 'antigravity-oauth-token'), JSON.stringify({
+    id_token_email: 'first@example.invalid', token: { refresh_token: 'synthetic-test-value' },
+  }), { mode: 0o600 })
+  await fs.writeFile(authFile, JSON.stringify({ 'agy-cli': { type: 'api', key: PREFIX + id } }))
+  const manager = new AccountManager({ root, authFile, realAgy, env: { ...process.env,
+    AGY_TEST_REPLY: '\n⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 131h12m36s.',
+  } })
+  try {
+    await manager.rpc(id, 'models')
+    for (const stream of [false, true]) {
+      const response = await manager.request(id, 'agy://local/v1/messages', {
+        body: JSON.stringify({ model: 'gemini-test-high', max_tokens: 64, stream,
+          messages: [{ role: 'user', content: 'Hello ' + stream }] }),
+      })
+      if (stream) {
+        const output = await response.text()
+        expect(output).toContain('event: error')
+        expect(output).toContain('rate_limit_error')
+        expect(output).not.toContain('event: message_stop')
+        expect(output).not.toContain('text_delta')
+      } else {
+        expect(response.status).toBe(429)
+        const body = await response.json()
+        expect(body.error.type).toBe('rate_limit_error')
+        expect(body.error.message).toContain('Resets in 131h12m36s.')
+      }
+    }
+  } finally {
+    await manager.close()
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 60000)

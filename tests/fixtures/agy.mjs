@@ -29,6 +29,15 @@ if (args.includes('--version')) {
   for await (const line of createInterface({ input: process.stdin })) {
     const message = JSON.parse(line)
     if (message.id === undefined) continue
+    if (message.method === 'session/prompt' && process.env.AGY_TEST_REPLY) {
+      for (const text of process.env.AGY_TEST_REPLY) {
+        console.log(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: {
+          sessionId: 'synthetic-session', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } },
+        } }))
+      }
+      console.log(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { stopReason: 'end_turn' } }))
+      continue
+    }
     const result = message.method === 'initialize' ? { protocolVersion: 1, agentInfo: { version: '1.5.9' }, agentCapabilities: {} }
       : { sessionId: 'synthetic-session', models: { availableModels: [{ modelId: 'gemini-test-high', name: 'Gemini Test (High)' }] } }
     console.log(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }))

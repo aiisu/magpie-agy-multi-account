@@ -113,11 +113,14 @@ const STEP_USAGE_POLL_MS = 25
 // 1.5.8 words a connection that failed every retry, and a spent credit
 // balance, on their own (#1136). 1.5.9 ends a turn whose every retry got 429
 // with the upstream status itself (#1151).
+const INDIVIDUAL_QUOTA_CORE = "⚠ Individual quota reached. Please upgrade your subscription to increase your limits."
+const INDIVIDUAL_QUOTA_RESET = /^(?:Resets in (?=\d)(?:\d+h)?(?:\d+m)?(?:\d+s)?\.?)?$/
 const AGENT_ERROR_MARKERS = [
   "\n⚠ Agent execution terminated due to error.\n",
   "\n⚠ There was a network issue connecting to the server, please try again.\n",
   "\n⚠ Your AI credits balance is too low to continue.\n",
   "\n⚠ RESOURCE_EXHAUSTED (code 429): Resource has been exhausted (e.g. check quota).\n",
+  "\n" + INDIVIDUAL_QUOTA_CORE,
 ]
 const AGENT_ERROR_CORES = AGENT_ERROR_MARKERS.map((marker) => marker.trim())
 const CREDITS_CORE = AGENT_ERROR_CORES[2]
@@ -1207,7 +1210,7 @@ class AcpConnection {
   }
 }
 
-class Turn {
+export class Turn {
   constructor(proc, messages) {
     this.proc = proc
     this.turnId = "turn_" + randomBytes(6).toString("hex")
@@ -1429,7 +1432,8 @@ class Turn {
     }
     for (const core of AGENT_ERROR_CORES) {
       const marker = text.lastIndexOf(core)
-      if (marker >= 0 && !text.slice(marker + core.length).trim()) {
+      if (marker >= 0 && (!text.slice(marker + core.length).trim() ||
+        core === INDIVIDUAL_QUOTA_CORE && !text.slice(marker + core.length).trim().includes("\n"))) {
         const start = text[marker - 1] === "\n" ? marker - 1 : marker
         this.heldText = text.slice(start)
         this.emitText(text.slice(0, start))
@@ -1491,10 +1495,11 @@ class Turn {
 
   // The prompt ended: a marker still held was agy's own.
   endText() {
-    const core = AGENT_ERROR_CORES.find((core) => this.heldText.includes(core))
+    const core = AGENT_ERROR_CORES.find((core) => this.heldText.includes(core) &&
+      (core !== INDIVIDUAL_QUOTA_CORE || INDIVIDUAL_QUOTA_RESET.test(this.heldText.slice(this.heldText.indexOf(core) + core.length).trim())))
     if (core) {
       this.agentError = true
-      this.agentErrorCore = core
+      this.agentErrorCore = core === INDIVIDUAL_QUOTA_CORE ? this.heldText.trim() : core
       this.heldText = ""
     }
   }
@@ -2207,6 +2212,9 @@ class Proc {
 
   async #agentError(turn) {
     const core = turn.agentErrorCore
+    if (core.startsWith(INDIVIDUAL_QUOTA_CORE)) {
+      return new AgentTurnError(`agy bridge: Antigravity quota or rate limit reached: ${core.replace(/^⚠ /, "")}`, "rate_limit_error")
+    }
     // A failed connection is in the reply's last attempt line, not the log's
     // executor error (#1136).
     const detail = await lastAgentError(this.logPath, turn.logOffset) || turn.attemptDetail ||
