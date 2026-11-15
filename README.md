@@ -69,6 +69,18 @@ Google token 保存在对应账号目录，绝不保存到插件仓库。
 `AGY_REAL_PATH` 指定。源码、账号目录和备份要分开；迁移机器时必须同时备份
 Magpie 的账号引用和 profile 目录，并将备份作为凭据保密。
 
+## 路由额度
+
+`0.1.55-multi.3` 将 `/usage` 明确列出的共享池成员绑定到对应模型及已核对的
+effort 变体，让 Magpie Routing 能显示剩余额度并识别该池耗尽。
+支持 Gemini 4 Hydrogen、Gemini 3.8 Flash、Claude Opus / Sonnet 5.5 和 GPT-OSS 120B。
+Gemini 4 Argon 的独立周额度仅绑定 Argon；只有报告明确将 Argon 列入共享池时，
+才使用该共享池。额度和重置时间仍直接来自当前账号的 CLI 报告。
+
+缺少成员关系、未知模型或缺少有效剩余比例时，窗口保持仅展示，不参与路由。
+Orchestrator 等未核实归属的模型仍显示额度未知。新增模型或报告格式变化后，
+需核对映射再更新插件；额度已知也不保证上游一定接受推理请求。
+
 ## 测试
 
 ```sh

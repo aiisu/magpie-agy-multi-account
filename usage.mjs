@@ -58,6 +58,27 @@ function cadence(bucket, id, name) {
   return { name: name || id }
 }
 
+const QUOTA_MODELS = new Map([
+  ["Gemini 4 Hydrogen", ["gemini-4-hydrogen", ["low", "medium", "high", "xhigh"]]],
+  ["Gemini 3.8 Flash", ["gemini-3.8-flash", ["low", "medium", "high"]]],
+  ["Gemini 4 Argon", ["gemini-4-argon", ["low", "medium", "high"]]],
+  ["Claude Opus 5.5", ["claude-opus-5-5", ["low", "medium", "high"]]],
+  ["Claude Sonnet 5.5", ["claude-sonnet-5-5", ["low", "medium", "high"]]],
+  ["GPT-OSS 120B", ["gpt-oss-120b", ["medium"]]],
+])
+
+function quotaModels(group, pool, bucketId) {
+  const members = /^Models within this group:\s*(.+)$/i.exec(text(group?.description))
+  const names = members ? members[1].split(",").map(name => name.trim())
+    : pool === "Gemini 4 Argon" && bucketId === "gemini-argon-wtu-weekly" ? [pool] : []
+  return [...new Set(names.flatMap(name => {
+    const model = QUOTA_MODELS.get(name)
+    if (!model) return []
+    const [id, efforts] = model
+    return [id, ...efforts.map(effort => `${id}-${effort}`)]
+  }))]
+}
+
 // agy's command report is not its token-usage object or a model-availability list.
 // Unknown quota is not evidence of exhaustion or a full allowance.
 export function parseUsageReport(value) {
@@ -84,11 +105,11 @@ export function parseUsageReport(value) {
         ?? (remaining?.case === "remainingFraction" ? remaining.value : undefined)
       const known = typeof fraction === "number" && Number.isFinite(fraction) && fraction >= 0 && fraction <= 1
       const resetsAt = resetTime(field(bucket, "resetTime", "reset_time"))
+      const models = quotaModels(group, pool, id)
       windows.push({
         name: period.name,
         pool: pool === "Claude & GPT" ? "Claude & GPT (Opus / Sonnet, shared)" : pool,
-        // This feature displays quota only; it must not change model routing.
-        aside: true,
+        ...(known && models.length ? { models } : { aside: true }),
         ...(known ? { used: Math.round((1 - fraction) * 1e8) / 1e6 } : { display: "Limits not available" }),
         ...(period.span ? { span: period.span } : {}),
         ...(resetsAt ? { resetsAt } : {}),
