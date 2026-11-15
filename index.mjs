@@ -3163,7 +3163,7 @@ function staleTurnVerdict(proc, turn, now = Date.now()) {
 
 // A pending tool turn only owns its own line of history, not a sibling request
 // that continues its base without carrying any of the emitted tool calls.
-function lineageVerdict(proc, turn, opts) {
+export function lineageVerdict(proc, turn, opts) {
   if (!turn || turn.attached || turn.cancelRequested || turn.steering || turn.done || turn.finalized) return null
   if (proc.dead || proc.stopping || proc.retiring || !turn.hasPendingMcp()) return null
   const history = opts.history
@@ -3172,6 +3172,15 @@ function lineageVerdict(proc, turn, opts) {
   const ids = new Set(turn.calls.map((call) => call.id))
   const carried = (opts.messages || []).some((message) => Array.isArray(message?.content) &&
     message.content.some((block) => block?.type === "tool_use" && ids.has(block.id)))
+  const seen = new Set()
+  const answered = new Set()
+  for (const message of history) {
+    for (const block of Array.isArray(message?.content) ? message.content : []) {
+      if (message.role === "assistant" && block?.type === "tool_use" && ids.has(block.id)) seen.add(block.id)
+      if (message.role === "user" && block?.type === "tool_result" && seen.has(block.tool_use_id)) answered.add(block.tool_use_id)
+    }
+  }
+  if (ids.size && [...ids].every(id => answered.has(id))) return "fork"
   if (history.length < base.length || historyKey(history.slice(0, base.length)) !== historyKey(base)) {
     // The client no longer continues this turn's base: it was shortened or its
     // prefix was rewritten (a compaction summary). A plain new request has left

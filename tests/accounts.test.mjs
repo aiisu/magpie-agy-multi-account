@@ -59,7 +59,7 @@ test('separates environments, identities, model and usage responses concurrently
   const env = accountEnvironment({ GEMINI_API_KEY: 'wrong', GOOGLE_API_KEY: 'wrong' }, root, 'control', '/cli', '/launcher', '/slots')
   expect(env.GEMINI_API_KEY).toBeUndefined()
   expect(env.GOOGLE_API_KEY).toBeUndefined()
-  expect(env.AGY_BRIDGE_MAX_PROCS).toBe('1')
+  expect(env.AGY_BRIDGE_MAX_PROCS).toBe('2')
   expect((await fs.stat(accountDirectory(root, first))).mode & 0o777).toBe(0o700)
 })
 

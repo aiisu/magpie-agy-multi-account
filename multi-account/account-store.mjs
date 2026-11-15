@@ -51,7 +51,7 @@ export function accountEnvironment(parent, directory, token, realAgy, launcher, 
     XDG_CACHE_HOME: path.join(directory, 'cache'), XDG_DATA_HOME: path.join(directory, 'data'),
     TMPDIR: path.join(directory, 'tmp'), AGY_BRIDGE_GEMINI_DIR: 'default',
     AGY_BRIDGE_STATE_FILE: path.join(directory, 'state/sessions.json'),
-    AGY_BRIDGE_MAX_PROCS: '1', AGY_BRIDGE_IDLE_MS: '60000', AGY_CLI_DISABLE_AUTO_UPDATE: 'true',
+    AGY_BRIDGE_MAX_PROCS: '2', AGY_BRIDGE_IDLE_MS: '60000', AGY_CLI_DISABLE_AUTO_UPDATE: 'true',
     AGY_PATH: launcher, AGY_REAL_PATH: realAgy, AGY_ACCOUNT_SLOTS: slots,
     AGY_ACCOUNT_PARENT_PID: String(process.pid), AGY_ACCOUNT_CONTROL_TOKEN: token }
 }
